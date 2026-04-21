@@ -1,0 +1,1 @@
+python -m crypto_bot.cli run --symbols BTC/USDT,SOL/USDT --interval-sec 60

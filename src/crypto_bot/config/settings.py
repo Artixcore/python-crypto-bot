@@ -1,8 +1,10 @@
 from enum import Enum
 from pathlib import Path
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from crypto_bot.universe import normalize_symbol_list
 
 
 class TradingProfile(str, Enum):
@@ -23,6 +25,7 @@ class AppSettings(BaseSettings):
     live_confirm: str = "no"
     ml_model_path: Path | None = None
     ml_shadow: bool = False
+    ml_enabled: bool = False
 
     data_dir: Path = Path("data/cache")
     journal_path: Path = Path("data/journal/trades.db")
@@ -35,14 +38,23 @@ class AppSettings(BaseSettings):
 
     telegram_bot_token: str = ""
     telegram_allowed_user_ids: str = ""
-    snapshot_symbols: str = "BTC/USDT,ETH/USDT"
+    telegram_trading_enabled: bool = False
+
+    snapshot_symbols: str = "BTC/USDT,SOL/USDT"
+
+    position_size_pct_of_equity: float = 2.0
+    ma_fast_period: int = 12
+    ma_slow_period: int = 26
+    rsi_period: int = 14
+    rsi_buy_max: float = 45.0
+    rsi_exit_min: float = 70.0
 
     @field_validator("live_confirm", mode="before")
     @classmethod
     def lower_confirm(cls, v: str) -> str:
         return str(v).strip().lower()
 
-    @field_validator("ml_shadow", "dry_run", "kill_switch", mode="before")
+    @field_validator("ml_shadow", "dry_run", "kill_switch", "ml_enabled", "telegram_trading_enabled", mode="before")
     @classmethod
     def bool_env(cls, v: object) -> bool:
         if isinstance(v, bool):
@@ -50,6 +62,12 @@ class AppSettings(BaseSettings):
         if isinstance(v, str):
             return v.strip().lower() in ("1", "true", "yes", "on")
         return bool(v)
+
+    @model_validator(mode="after")
+    def normalize_snapshot_symbols(self) -> AppSettings:
+        joined = ",".join(normalize_symbol_list(self.snapshot_symbols))
+        object.__setattr__(self, "snapshot_symbols", joined)
+        return self
 
     def live_allowed(self) -> bool:
         return (
@@ -60,7 +78,7 @@ class AppSettings(BaseSettings):
         )
 
     def snapshot_symbol_list(self) -> list[str]:
-        return [s.strip() for s in self.snapshot_symbols.split(",") if s.strip()]
+        return normalize_symbol_list(self.snapshot_symbols)
 
 
 def load_settings() -> AppSettings:

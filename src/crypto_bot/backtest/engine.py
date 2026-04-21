@@ -5,24 +5,28 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-from crypto_bot.features.indicators import add_basic_indicators
+from crypto_bot.features.indicators import add_ma_rsi_indicators
 from crypto_bot.risk.policy import (
     StopTakePolicy,
     check_exit_long,
     initial_plan_for_long,
     update_trailing_long,
 )
-from crypto_bot.risk.position_sizing import risk_based_size
+from crypto_bot.risk.position_sizing import fixed_pct_of_equity_size
 from crypto_bot.strategies.base import StrategySignal
-from crypto_bot.strategies.trend_pullback import trend_pullback_signals
+from crypto_bot.strategies.ma_rsi import MaRsiParams, ma_rsi_signals
 
 
 @dataclass(frozen=True)
 class BacktestConfig:
     fee_bps: float = 10.0
     slippage_bps: float = 5.0
-    risk_fraction: float = 0.005
     initial_equity: float = 10_000.0
+    position_pct: float = 2.0
+    ma_fast_period: int = 12
+    ma_slow_period: int = 26
+    rsi_period: int = 14
+    ma_rsi_params: MaRsiParams = field(default_factory=MaRsiParams)
     stop_take: StopTakePolicy = field(default_factory=StopTakePolicy)
 
 
@@ -52,10 +56,15 @@ def run_backtest(
     unless stopped intrabar (uses low/high).
     """
     cfg = config or BacktestConfig()
-    feats = add_basic_indicators(ohlcv)
+    feats = add_ma_rsi_indicators(
+        ohlcv,
+        ma_fast=cfg.ma_fast_period,
+        ma_slow=cfg.ma_slow_period,
+        rsi_period=cfg.rsi_period,
+    )
     feats = feats.dropna().copy()
     if signals is None:
-        sig = trend_pullback_signals(feats)
+        sig = ma_rsi_signals(feats, cfg.ma_rsi_params)
     else:
         sig = signals.reindex(feats.index).fillna(StrategySignal.FLAT)
 
@@ -117,7 +126,7 @@ def run_backtest(
         if position_qty == 0 and target_long:
             stop_px = o_next - cfg.stop_take.atr_stop_mult * atr
             if stop_px > 0 and stop_px < o_next:
-                qty = risk_based_size(cash, o_next, stop_px, cfg.risk_fraction)
+                qty = fixed_pct_of_equity_size(cash, o_next, cfg.position_pct)
                 cost = (
                     qty
                     * _apply_costs(

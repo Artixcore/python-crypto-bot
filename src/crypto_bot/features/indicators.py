@@ -7,6 +7,10 @@ def ema(series: pd.Series, span: int) -> pd.Series:
     return series.ewm(span=span, adjust=False).mean()
 
 
+def sma(series: pd.Series, period: int) -> pd.Series:
+    return series.rolling(period, min_periods=period).mean()
+
+
 def atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     high = df["high"]
     low = df["low"]
@@ -48,4 +52,20 @@ def add_basic_indicators(
     out["ema_trend"] = ema(out["close"], ema_trend)
     out["atr"] = atr(out, atr_period)
     out["rsi"] = rsi(out["close"], rsi_period)
+    return out
+
+
+def add_ma_rsi_indicators(
+    df: pd.DataFrame,
+    *,
+    ma_fast: int = 12,
+    ma_slow: int = 26,
+    rsi_period: int = 14,
+    atr_period: int = 14,
+) -> pd.DataFrame:
+    out = df.copy()
+    out["ma_fast"] = sma(out["close"], ma_fast)
+    out["ma_slow"] = sma(out["close"], ma_slow)
+    out["rsi"] = rsi(out["close"], rsi_period)
+    out["atr"] = atr(out, atr_period)
     return out

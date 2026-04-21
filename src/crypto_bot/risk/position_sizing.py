@@ -1,6 +1,27 @@
 from __future__ import annotations
 
 
+def fixed_pct_of_equity_size(
+    equity: float,
+    price: float,
+    position_pct: float,
+    *,
+    min_notional: float = 10.0,
+    max_notional_fraction: float = 0.25,
+) -> float:
+    """
+    Position size in base units from a fixed percent of equity (e.g. position_pct=2.0 -> 2%).
+    """
+    if equity <= 0 or price <= 0:
+        return 0.0
+    pct = position_pct / 100.0 if position_pct > 1.0 else position_pct
+    notional = equity * min(pct, max_notional_fraction)
+    size = notional / price
+    if size * price < min_notional:
+        return 0.0
+    return float(size)
+
+
 def risk_based_size(
     equity: float,
     entry_price: float,

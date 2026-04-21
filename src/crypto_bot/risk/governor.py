@@ -17,7 +17,7 @@ class RiskDecision(str, Enum):
 
 @dataclass
 class RiskLimits:
-    max_open_positions: int = 1
+    max_open_positions: int = 2
     max_daily_loss_pct: float = 3.0
     max_orders_per_day: int = 50
     max_position_notional_pct: float = 25.0

@@ -23,6 +23,12 @@ from crypto_bot.universe import parse_pair_or_raise
 logger = structlog.get_logger(__name__)
 
 
+async def cmd_ping(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """No Binance calls — use to verify the bot token and polling work."""
+    if update.effective_message:
+        await update.effective_message.reply_text("pong — bot is running.")
+
+
 async def _ensure_allowed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     settings: AppSettings = context.application.bot_data["settings"]
     allowed = parse_allowed_user_ids(settings.telegram_allowed_user_ids)
@@ -42,7 +48,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_message:
         await update.effective_message.reply_text(
             "Binance Spot bot (BTC & SOL).\n"
-            "Commands: /help /balance /snapshot /status /buy /sell",
+            "Try /ping (no API keys). Commands: /help /balance /snapshot /status /buy /sell",
         )
 
 

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import structlog
-from telegram.ext import Application, CommandHandler
+from telegram import Update
+from telegram.ext import Application, CommandHandler, ContextTypes
 
 from crypto_bot.config.settings import load_settings
 from crypto_bot.data.binance_client import BinanceSpotClient
@@ -9,6 +10,7 @@ from crypto_bot.telegram_bot.handlers import (
     cmd_balance,
     cmd_buy,
     cmd_help,
+    cmd_ping,
     cmd_sell,
     cmd_snapshot,
     cmd_start,
@@ -16,6 +18,17 @@ from crypto_bot.telegram_bot.handlers import (
 )
 
 logger = structlog.get_logger(__name__)
+
+
+async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    err = context.error
+    logger.exception("telegram_handler_error", error=repr(err))
+    if isinstance(update, Update) and update.effective_message:
+        try:
+            msg = f"{type(err).__name__}: {err}"
+            await update.effective_message.reply_text(f"Bot error: {msg[:3500]}")
+        except Exception:
+            logger.exception("telegram_error_reply_failed")
 
 
 def build_application() -> Application:
@@ -34,18 +47,22 @@ def build_application() -> Application:
         )
         application.bot_data["exchange"] = client.exchange
         application.bot_data["_client"] = client
-        logger.info("telegram_loading_markets")
-        try:
-            application.bot_data["exchange"].load_markets()
-        except Exception as e:
-            logger.warning("telegram_load_markets_failed", error=str(e))
+        # Do not call load_markets() here — it can hang on dapi/network and block polling.
 
     app = (
         Application.builder()
         .token(token)
+        .read_timeout(60.0)
+        .write_timeout(60.0)
+        .connect_timeout(45.0)
+        .get_updates_read_timeout(60)
+        .get_updates_write_timeout(60)
+        .get_updates_connect_timeout(45)
         .post_init(post_init)
         .build()
     )
+    app.add_error_handler(on_error)
+    app.add_handler(CommandHandler("ping", cmd_ping))
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("snapshot", cmd_snapshot))

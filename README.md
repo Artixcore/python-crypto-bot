@@ -1,6 +1,12 @@
-# Binance Spot AI Trading Agent
+# Binance Spot — BTC & SOL focused bot
 
-Rule-first Spot trading stack: historical data and caching, backtesting, risk-governed execution, paper and live modes, optional ML filter.
+Minimal Spot stack for **BTC/USDT** and **SOL/USDT** only: MA+RSI strategy, fixed-% position sizing, stop/take-profit, concurrent two-pair paper/live runner, and optional Telegram UI.
+
+## Scope
+
+- **Universe:** `BTC`, `SOL`, quote `USDT` ([`universe.py`](src/crypto_bot/universe.py)).
+- **Strategy:** SMA crossover + RSI filter ([`strategies/ma_rsi.py`](src/crypto_bot/strategies/ma_rsi.py)).
+- **Risk:** `CRYPTO_BOT_POSITION_SIZE_PCT_OF_EQUITY` (default 2%), shared SL/TP policy, up to **two** open positions (one per pair).
 
 ## Quick start
 
@@ -11,37 +17,30 @@ pip install -e ".[dev]"
 cp .env.example .env
 ```
 
-Fetch klines (read-only):
-
-```bash
-python -m crypto_bot.cli fetch-klines --symbol BTC/USDT --timeframe 1h --limit 500
-```
-
-Run a backtest:
+Backtest (defaults follow `.env` strategy params):
 
 ```bash
 python -m crypto_bot.cli backtest --symbol BTC/USDT --timeframe 1h
 ```
 
-Paper trading (simulated broker):
+Concurrent paper/live runner:
 
 ```bash
 CRYPTO_BOT_PROFILE=paper python -m crypto_bot.cli run --interval-sec 60
+# Optional: --symbols BTC/USDT,SOL/USDT
 ```
 
-Live trading requires `CRYPTO_BOT_PROFILE=live`, valid API keys, and `CRYPTO_BOT_LIVE_CONFIRM=yes`.
+Live requires `CRYPTO_BOT_PROFILE=live`, API keys, and `CRYPTO_BOT_LIVE_CONFIRM=yes`.
 
-### Telegram bot (read-only)
-
-Query Binance Spot data from Telegram: `/snapshot`, `/balance`, `/help`. Set your **BotFather token** in `.env`; Binance API keys stay on the server only. Optionally set **`CRYPTO_BOT_TELEGRAM_ALLOWED_USER_IDS`** to restrict who can use the bot (comma-separated numeric IDs); if unset or empty, **any** Telegram user who messages the bot is allowed.
+### Telegram
 
 ```bash
 python -m crypto_bot.telegram_bot
 ```
 
-Set `CRYPTO_BOT_TELEGRAM_BOT_TOKEN` and optionally `CRYPTO_BOT_TELEGRAM_ALLOWED_USER_IDS`, `CRYPTO_BOT_SNAPSHOT_SYMBOLS=BTC/USDT,ETH/USDT`.
+`/balance` shows **BTC, SOL, USDT** only. `/snapshot` is restricted to configured pairs. `/buy` and `/sell` need `CRYPTO_BOT_TELEGRAM_TRADING_ENABLED=yes` and **live** profile with confirmation.
 
-See [RUNBOOK.md](RUNBOOK.md) for operations and promotion workflow.
+See [RUNBOOK.md](RUNBOOK.md) for operations.
 
 ## Disclaimer
 

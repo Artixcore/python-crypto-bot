@@ -5,7 +5,15 @@ from telegram.ext import Application, CommandHandler
 
 from crypto_bot.config.settings import load_settings
 from crypto_bot.data.binance_client import BinanceSpotClient
-from crypto_bot.telegram_bot.handlers import cmd_balance, cmd_help, cmd_snapshot, cmd_start
+from crypto_bot.telegram_bot.handlers import (
+    cmd_balance,
+    cmd_buy,
+    cmd_help,
+    cmd_sell,
+    cmd_snapshot,
+    cmd_start,
+    cmd_status,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -25,6 +33,7 @@ def build_application() -> Application:
             api_secret=settings.binance_api_secret,
         )
         application.bot_data["exchange"] = client.exchange
+        application.bot_data["_client"] = client
         logger.info("telegram_loading_markets")
         try:
             application.bot_data["exchange"].load_markets()
@@ -40,5 +49,8 @@ def build_application() -> Application:
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("snapshot", cmd_snapshot))
+    app.add_handler(CommandHandler("status", cmd_status))
     app.add_handler(CommandHandler("balance", cmd_balance))
+    app.add_handler(CommandHandler("buy", cmd_buy))
+    app.add_handler(CommandHandler("sell", cmd_sell))
     return app

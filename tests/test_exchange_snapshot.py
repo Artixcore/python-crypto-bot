@@ -5,7 +5,11 @@ from crypto_bot.exchange_snapshot import build_snapshot
 
 def test_build_snapshot_returns_expected_keys():
     ex = MagicMock()
-    ex.fetch_balance.return_value = {"USDT": {"free": 100.0, "total": 100.0}}
+    ex.fetch_balance.return_value = {
+        "BTC": {"free": 0.01, "total": 0.01},
+        "SOL": {"free": 1.0, "total": 1.0},
+        "USDT": {"free": 100.0, "total": 100.0},
+    }
     ex.fetch_ticker.return_value = {"symbol": "BTC/USDT", "last": 50_000.0}
     ex.fetch_open_orders.return_value = []
     ex.fetch_my_trades.return_value = []

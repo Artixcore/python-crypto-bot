@@ -7,6 +7,7 @@ import structlog
 
 from crypto_bot.backtest.engine import BacktestConfig, run_backtest
 from crypto_bot.config.settings import AppSettings
+from crypto_bot.strategies.ma_rsi import MaRsiParams
 from crypto_bot.data.binance_client import BinanceSpotClient
 from crypto_bot.data.cache import KlineCache
 
@@ -23,7 +24,16 @@ def run_backtest_cli(args: Namespace, settings: AppSettings) -> int:
     )
     cache = KlineCache(settings.data_dir)
     df = cache.fetch_or_load(client, args.symbol, args.timeframe, limit=args.limit)
-    cfg = BacktestConfig()
+    cfg = BacktestConfig(
+        position_pct=settings.position_size_pct_of_equity,
+        ma_fast_period=settings.ma_fast_period,
+        ma_slow_period=settings.ma_slow_period,
+        rsi_period=settings.rsi_period,
+        ma_rsi_params=MaRsiParams(
+            rsi_buy_max=settings.rsi_buy_max,
+            rsi_exit_min=settings.rsi_exit_min,
+        ),
+    )
     result = run_backtest(df, config=cfg)
     print(json.dumps(result.metrics, indent=2))
     if not result.trades.empty:

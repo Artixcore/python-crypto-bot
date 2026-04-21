@@ -35,8 +35,12 @@ def _build_parser() -> argparse.ArgumentParser:
     wf.add_argument("--test-bars", type=int, default=100)
     wf.add_argument("--step-bars", type=int, default=100)
 
-    run = sub.add_parser("run", help="Paper or live runner loop")
-    run.add_argument("--symbol", default="BTC/USDT")
+    run = sub.add_parser("run", help="Paper or live runner loop (BTC/USDT and SOL/USDT)")
+    run.add_argument(
+        "--symbols",
+        default="BTC/USDT,SOL/USDT",
+        help="Comma-separated pairs (only BTC/USDT,SOL/USDT allowed)",
+    )
     run.add_argument("--timeframe", default="1h")
     run.add_argument("--interval-sec", type=int, default=60)
 

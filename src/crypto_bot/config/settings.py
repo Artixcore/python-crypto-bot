@@ -33,10 +33,9 @@ class AppSettings(BaseSettings):
     dry_run: bool = False
     kill_switch: bool = False
 
-    dashboard_host: str = "127.0.0.1"
-    dashboard_port: int = 8765
-    dashboard_symbols: str = "BTC/USDT,ETH/USDT"
-    dashboard_refresh_sec: int = 8
+    telegram_bot_token: str = ""
+    telegram_allowed_user_ids: str = ""
+    snapshot_symbols: str = "BTC/USDT,ETH/USDT"
 
     @field_validator("live_confirm", mode="before")
     @classmethod
@@ -60,8 +59,8 @@ class AppSettings(BaseSettings):
             and bool(self.binance_api_secret)
         )
 
-    def dashboard_symbol_list(self) -> list[str]:
-        return [s.strip() for s in self.dashboard_symbols.split(",") if s.strip()]
+    def snapshot_symbol_list(self) -> list[str]:
+        return [s.strip() for s in self.snapshot_symbols.split(",") if s.strip()]
 
 
 def load_settings() -> AppSettings:

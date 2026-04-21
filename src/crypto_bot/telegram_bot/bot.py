@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import structlog
 from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 
 from crypto_bot.config.settings import load_settings, resolved_env_file_path
 from crypto_bot.data.binance_client import BinanceSpotClient
@@ -15,6 +15,7 @@ from crypto_bot.telegram_bot.handlers import (
     cmd_snapshot,
     cmd_start,
     cmd_status,
+    on_menu_callback,
 )
 
 logger = structlog.get_logger(__name__)
@@ -81,6 +82,7 @@ def build_application() -> Application:
         .build()
     )
     app.add_error_handler(on_error)
+    app.add_handler(CallbackQueryHandler(on_menu_callback, pattern=r"^v:"))
     app.add_handler(CommandHandler("ping", cmd_ping))
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_help))

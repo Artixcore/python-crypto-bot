@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
 import structlog
 from telegram import Update
+from telegram.constants import ParseMode
+from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from crypto_bot.config.settings import AppSettings, TradingProfile
 from crypto_bot.data.balances import filtered_balance
+from crypto_bot.data.binance_client import BinanceSpotClient
 from crypto_bot.exchange_snapshot import build_snapshot
 from crypto_bot.execution.binance_errors import call_with_exchange_retry, format_exchange_error
 from crypto_bot.execution.order_router import OrderRequest, OrderRouter
@@ -17,6 +18,23 @@ from crypto_bot.telegram_bot.formatting import (
     format_balance_table,
     format_status_slim,
     snapshot_to_messages,
+)
+from crypto_bot.telegram_bot.keyboards import (
+    hub_keyboard,
+    parse_menu_callback,
+    subview_keyboard,
+)
+from crypto_bot.telegram_bot.views import (
+    build_indicator_lines,
+    format_account_html,
+    format_execution_log_html,
+    format_help_html,
+    format_hub_html,
+    format_markets_html,
+    format_orders_and_fills_html,
+    format_signals_html,
+    format_strategy_risk_html,
+    format_trade_help_html,
 )
 from crypto_bot.universe import parse_pair_or_raise
 
@@ -35,37 +53,126 @@ async def _ensure_allowed(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     settings: AppSettings = context.application.bot_data["settings"]
     allowed = parse_allowed_user_ids(settings.telegram_allowed_user_ids)
     uid = update.effective_user.id if update.effective_user else None
-    msg = update.effective_message
-    if not user_allowed(uid, allowed):
-        logger.info("telegram_access_denied", user_id=uid, allowlist_size=len(allowed))
-        if msg:
-            await msg.reply_text("Unauthorized.")
-        return False
-    return True
+    if user_allowed(uid, allowed):
+        return True
+    logger.info("telegram_access_denied", user_id=uid, allowlist_size=len(allowed))
+    if update.callback_query:
+        await update.callback_query.answer("Unauthorized.", show_alert=True)
+    elif update.effective_message:
+        await update.effective_message.reply_text("Unauthorized.")
+    return False
+
+
+def _spot_client(context: ContextTypes.DEFAULT_TYPE) -> BinanceSpotClient:
+    client = context.application.bot_data.get("_client")
+    if client is not None:
+        return client
+    settings: AppSettings = context.application.bot_data["settings"]
+    client = BinanceSpotClient(
+        api_key=settings.binance_api_key,
+        api_secret=settings.binance_api_secret,
+    )
+    context.application.bot_data["_client"] = client
+    return client
+
+
+async def _reply_or_edit_hub(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    text: str,
+    reply_markup,
+) -> None:
+    if update.callback_query and update.callback_query.message:
+        try:
+            await update.callback_query.edit_message_text(
+                text,
+                parse_mode=ParseMode.HTML,
+                reply_markup=reply_markup,
+            )
+            return
+        except TelegramError as e:
+            logger.warning("telegram_edit_failed", error=str(e))
+            await update.callback_query.message.reply_text(
+                text,
+                parse_mode=ParseMode.HTML,
+                reply_markup=reply_markup,
+            )
+            return
+    if update.effective_message:
+        await update.effective_message.reply_text(
+            text,
+            parse_mode=ParseMode.HTML,
+            reply_markup=reply_markup,
+        )
+
+
+async def on_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _ensure_allowed(update, context):
+        return
+    q = update.callback_query
+    if not q:
+        return
+    await q.answer()
+    view_id = parse_menu_callback(q.data)
+    if not view_id:
+        return
+
+    settings: AppSettings = context.application.bot_data["settings"]
+    ex = context.application.bot_data["exchange"]
+    client = _spot_client(context)
+    journal = JournalStore(settings.journal_path)
+    snap = build_snapshot(ex, settings.snapshot_symbol_list())
+
+    if view_id == "hub":
+        text = format_hub_html(settings, snap)
+        markup = hub_keyboard()
+    elif view_id == "acct":
+        text = format_account_html(settings, snap)
+        markup = subview_keyboard()
+    elif view_id == "mkt":
+        text = format_markets_html(snap)
+        markup = subview_keyboard()
+    elif view_id == "ord":
+        text = format_orders_and_fills_html(snap)
+        markup = subview_keyboard()
+    elif view_id == "strat":
+        text = format_strategy_risk_html(settings, journal)
+        markup = subview_keyboard()
+    elif view_id == "log":
+        text = format_execution_log_html(journal)
+        markup = subview_keyboard()
+    elif view_id == "sig":
+        ind = build_indicator_lines(client, settings)
+        text = format_signals_html(settings, journal, ind)
+        markup = subview_keyboard()
+    elif view_id == "trd":
+        text = format_trade_help_html(settings)
+        markup = subview_keyboard()
+    elif view_id == "hlp":
+        text = format_help_html()
+        markup = subview_keyboard()
+    else:
+        text = format_hub_html(settings, snap)
+        markup = hub_keyboard()
+
+    await _reply_or_edit_hub(update, context, text, markup)
 
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await _ensure_allowed(update, context):
         return
-    if update.effective_message:
-        await update.effective_message.reply_text(
-            "Binance Spot bot (BTC & SOL).\n"
-            "Try /ping (no API keys). Commands: /help /balance /snapshot /status /buy /sell",
-        )
+    settings: AppSettings = context.application.bot_data["settings"]
+    ex = context.application.bot_data["exchange"]
+    snap = build_snapshot(ex, settings.snapshot_symbol_list())
+    text = format_hub_html(settings, snap)
+    await _reply_or_edit_hub(update, context, text, hub_keyboard())
 
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await _ensure_allowed(update, context):
         return
-    if update.effective_message:
-        await update.effective_message.reply_text(
-            "/balance — BTC, SOL, USDT balances\n"
-            "/snapshot — focused JSON (pairs + balances)\n"
-            "/status — one-line prices + open order count\n"
-            "/buy BASE USDT_AMOUNT — market buy (e.g. /buy BTC 25)\n"
-            "/sell BASE QTY — market sell base (e.g. /sell SOL 0.5)\n"
-            "Trading commands need CRYPTO_BOT_TELEGRAM_TRADING_ENABLED=yes and paper/live profile.",
-        )
+    text = format_help_html()
+    await _reply_or_edit_hub(update, context, text, subview_keyboard())
 
 
 async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -134,8 +241,6 @@ async def cmd_buy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     client = context.application.bot_data.get("_client")
     if client is None:
-        from crypto_bot.data.binance_client import BinanceSpotClient
-
         client = BinanceSpotClient(
             api_key=settings.binance_api_key,
             api_secret=settings.binance_api_secret,
@@ -194,8 +299,6 @@ async def cmd_sell(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     except ValueError as e:
         await msg.reply_text(str(e))
         return
-
-    from crypto_bot.data.binance_client import BinanceSpotClient
 
     client = context.application.bot_data.get("_client")
     if client is None:

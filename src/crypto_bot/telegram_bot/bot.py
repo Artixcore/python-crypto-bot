@@ -4,7 +4,7 @@ import structlog
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-from crypto_bot.config.settings import load_settings
+from crypto_bot.config.settings import load_settings, resolved_env_file_path
 from crypto_bot.data.binance_client import BinanceSpotClient
 from crypto_bot.telegram_bot.handlers import (
     cmd_balance,
@@ -34,6 +34,12 @@ async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
 def build_application() -> Application:
     settings = load_settings()
     token = settings.telegram_bot_token.strip()
+    env_path = resolved_env_file_path()
+    logger.info(
+        "telegram_settings_loaded",
+        cwd_env_hint=str(env_path) if env_path else "no_repo_dotenv_using_env_vars_only",
+        token_configured=bool(token),
+    )
     if not token:
         raise SystemExit(
             "Missing CRYPTO_BOT_TELEGRAM_BOT_TOKEN. Add it to .env (from BotFather).",
@@ -41,6 +47,19 @@ def build_application() -> Application:
 
     async def post_init(application: Application) -> None:
         application.bot_data["settings"] = settings
+        try:
+            me = await application.bot.get_me()
+            logger.info(
+                "telegram_bot_ready",
+                bot_username=me.username,
+                bot_id=me.id,
+            )
+        except Exception as e:
+            raise SystemExit(
+                "Telegram token rejected or network error (getMe failed). "
+                "Check CRYPTO_BOT_TELEGRAM_BOT_TOKEN, firewall, and https://api.telegram.org access. "
+                f"Detail: {e!r}",
+            ) from e
         client = BinanceSpotClient(
             api_key=settings.binance_api_key,
             api_secret=settings.binance_api_secret,

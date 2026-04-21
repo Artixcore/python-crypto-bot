@@ -7,6 +7,24 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from crypto_bot.universe import normalize_symbol_list
 
 
+def _find_env_file() -> Path | None:
+    """Locate `.env` next to project root (walks up from this package)."""
+    here = Path(__file__).resolve().parent
+    for parent in [here, *here.parents]:
+        candidate = parent / ".env"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+_ENV_FILE = _find_env_file()
+
+
+def resolved_env_file_path() -> Path | None:
+    """Absolute path to `.env` if found next to the repo; else ``None`` (env vars only)."""
+    return _ENV_FILE
+
+
 class TradingProfile(str, Enum):
     DEV = "dev"
     PAPER = "paper"
@@ -16,7 +34,8 @@ class TradingProfile(str, Enum):
 class AppSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="CRYPTO_BOT_",
-        env_file=".env",
+        # Prefer repo `.env` even when the process cwd is elsewhere (common on Windows / IDEs).
+        env_file=_ENV_FILE if _ENV_FILE is not None else ".env",
         env_file_encoding="utf-8",
         extra="ignore",
     )

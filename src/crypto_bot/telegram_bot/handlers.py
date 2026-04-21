@@ -25,6 +25,8 @@ logger = structlog.get_logger(__name__)
 
 async def cmd_ping(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """No Binance calls — use to verify the bot token and polling work."""
+    uid = update.effective_user.id if update.effective_user else None
+    logger.info("telegram_cmd_ping", user_id=uid)
     if update.effective_message:
         await update.effective_message.reply_text("pong — bot is running.")
 
